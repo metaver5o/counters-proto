@@ -28,6 +28,8 @@ import logging
 import os
 import re
 import sqlite3
+import zlib
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -40,30 +42,61 @@ from ..store import Store
 
 log = logging.getLogger("counters")
 
-def _read_git_commit(git_dir: str = "/app/.git") -> str | None:
-    """Resolve the short HEAD commit by reading a git dir directly (no git
-    binary). Used when the repo's .git is bind-mounted into the container, so a
-    plain `docker compose up -d` shows the real revision without a build arg."""
+GIT_DIR = "/app/.git"
+
+
+def _read_git_head(git_dir: str = GIT_DIR) -> tuple[str, Path] | None:
+    """Resolve HEAD by reading a git dir directly (no git binary), returning
+    (full sha, the file that named it). Used when the repo's .git is
+    bind-mounted into the container, so a plain `docker compose up -d` shows
+    the real revision without a build arg. The source file matters for
+    `_resolve_updated`: its mtime is when the deploy last moved the ref."""
     head_path = Path(git_dir, "HEAD")
     try:
         head = head_path.read_text().strip()
     except OSError:
         return None
     if not head.startswith("ref:"):
-        return head[:7] or None  # detached HEAD holds the sha directly
+        return (head, head_path) if head else None  # detached HEAD holds the sha
     ref = head[4:].strip()  # e.g. "refs/heads/main"
+    ref_path = Path(git_dir, ref)
     try:  # loose ref
-        return (Path(git_dir, ref).read_text().strip()[:7]) or None
+        sha = ref_path.read_text().strip()
+        if sha:
+            return sha, ref_path
     except OSError:
         pass
+    packed = Path(git_dir, "packed-refs")
     try:  # packed-refs fallback
-        for line in Path(git_dir, "packed-refs").read_text().splitlines():
+        for line in packed.read_text().splitlines():
             if line and not line.startswith(("#", "^")):
                 sha, _, name = line.partition(" ")
                 if name.strip() == ref:
-                    return sha.strip()[:7]
+                    return sha.strip(), packed
     except OSError:
         pass
+    return None
+
+
+def _commit_time(sha: str, git_dir: str = GIT_DIR) -> int | None:
+    """Committer timestamp (epoch) of a loose commit object, or None. Objects
+    that arrived by fetch live in packfiles, which we don't parse — only
+    locally-created commits are reliably loose."""
+    try:
+        raw = zlib.decompress(Path(git_dir, "objects", sha[:2], sha[2:]).read_bytes())
+    except (OSError, zlib.error):
+        return None
+    header, _, body = raw.partition(b"\0")
+    if not header.startswith(b"commit "):
+        return None
+    for line in body.split(b"\n"):
+        if not line:  # end of headers; committer line not found
+            return None
+        if line.startswith(b"committer "):
+            try:  # b"committer Name <email> 1753594828 +0000" — epoch is UTC
+                return int(line.rsplit(b">", 1)[1].split()[0])
+            except (IndexError, ValueError):
+                return None
     return None
 
 
@@ -73,11 +106,37 @@ def _resolve_commit() -> str:
     env = os.environ.get("COUNTER_GIT_COMMIT")
     if env and env != "dev":
         return env
-    return _read_git_commit() or env or "dev"
+    head = _read_git_head()
+    return (head[0][:7] if head else None) or env or "dev"
 
 
-# Deployed build revision, surfaced on /status and in the explorer footer.
+def _resolve_updated() -> str | None:
+    """When the deployed code last changed, ISO 8601 UTC, or None if unknown.
+
+    Best source first: a CI build stamp; then the HEAD commit's own committer
+    time (loose object); then the mtime of the file that named HEAD — pulled
+    objects arrive packed, but the `git pull` that moved the ref rewrote that
+    file, so its mtime is the moment this deployment picked the commit up."""
+    env = os.environ.get("COUNTER_GIT_COMMIT_DATE")
+    if env:
+        return env
+    head = _read_git_head()
+    if not head:
+        return None
+    sha, source = head
+    ts = _commit_time(sha)
+    if ts is None:
+        try:
+            ts = int(source.stat().st_mtime)
+        except OSError:
+            return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# Deployed build revision + when it last changed, surfaced on /status and in
+# the explorer footer.
 GIT_COMMIT = _resolve_commit()
+GIT_UPDATED = _resolve_updated()
 
 # Headers for untrusted inscription bytes (/content and iframe-media previews),
 # mirroring ord's `content_response`. Two CSP headers are sent; the browser
@@ -107,6 +166,12 @@ STATIC_TYPES = {
 # Inline only small textual blobs in JSON responses; larger or binary content
 # is served on demand from /content/<number>.
 BODY_MAX_BYTES = 256 * 1024
+
+# Derived views (/preview) are functions of the rendering rules, not of
+# immutable content, so they must never be cached `immutable`: a rules change
+# has to take effect promptly. /content stays immutable (content-addressed).
+DERIVED_MAX_AGE = 300
+STATIC_MAX_AGE = 3600      # logos, css: temporary — they change only on deploy
 INLINE_TYPES = ("text/", "application/json", "image/svg+xml")
 
 
@@ -211,7 +276,11 @@ class Handler(BaseHTTPRequestHandler):
                 "indexed": store.get_last_height(self.config.start_height),
                 "count": store.count(),
                 "genesis": 0,
+                # Release identity: the commit names the exact deployed build,
+                # and updated (ISO 8601 UTC, null if unknown) is when the
+                # deployed code last changed.
                 "commit": GIT_COMMIT,
+                "updated": GIT_UPDATED,
             }
         finally:
             store.close()
@@ -337,14 +406,16 @@ class Handler(BaseHTTPRequestHandler):
                 if blob is None:
                     return self._send(404, "text/html; charset=utf-8",
                                       b"<!doctype html><meta charset=utf-8><title>404</title>content unavailable")
-                return self._send(200, ctype, blob, immutable=True, extra_headers=CONTENT_HEADERS)
+                return self._send(200, ctype, blob, max_age=DERIVED_MAX_AGE,
+                                  extra_headers=CONTENT_HEADERS)
             text = None
             if kind in ("text", "code", "markdown"):
                 blob = store.read_blob(row["content_sha256"]) or b""
                 text = blob.decode("utf-8", "replace")
             doc = preview.wrapper(kind, number, ctype, extra, text)
             self._send(
-                200, "text/html; charset=utf-8", doc.encode("utf-8"), immutable=True,
+                200, "text/html; charset=utf-8", doc.encode("utf-8"),
+                max_age=DERIVED_MAX_AGE,
                 extra_headers=[
                     ("Content-Security-Policy", preview.csp_for(kind)),
                     ("X-Content-Type-Options", "nosniff"),
@@ -364,7 +435,11 @@ class Handler(BaseHTTPRequestHandler):
             or target.suffix not in STATIC_TYPES
         ):
             return self._send(404, "text/plain; charset=utf-8", b"not found")
-        self._send(200, STATIC_TYPES[target.suffix], target.read_bytes())
+        # Assets get a temporary browser cache; the app shell (index.html)
+        # stays uncached so a deploy shows up on the next refresh.
+        max_age = None if target.suffix == ".html" else STATIC_MAX_AGE
+        self._send(200, STATIC_TYPES[target.suffix], target.read_bytes(),
+                   max_age=max_age)
 
     # --- response helpers --------------------------------------------------
 
@@ -372,6 +447,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, "application/json; charset=utf-8", json.dumps(obj).encode())
 
     def _send(self, status: int, ctype: str, body: bytes, *, immutable: bool = False,
+              max_age: int | None = None,
               extra_headers: list[tuple[str, str]] | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", ctype)
@@ -379,6 +455,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         if immutable:
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        elif max_age is not None:
+            self.send_header("Cache-Control", f"public, max-age={max_age}")
         for name, value in (extra_headers or []):
             self.send_header(name, value)
         self.end_headers()

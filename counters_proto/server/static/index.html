@@ -460,11 +460,24 @@ function meterDigits(num,cls){
 }
 function renderContent(c){
   // ord's model: every counter is embedded only through a sandboxed iframe
-  // (sandbox=allow-scripts => opaque origin, no same-origin access) pointing at
-  // /preview/<n>. The server returns either the raw content (HTML/SVG) or a
-  // confined, same-origin wrapper page per media type. The explorer itself
-  // never renders the untrusted bytes.
-  if(API) return `<div class="render"><iframe class="sandboxed" sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy" title="counter ${c.number}" src="${API}/preview/${c.number}"></iframe></div>`;
+  // pointing at /preview/<n>. The server returns either the raw content
+  // (HTML/SVG) or a confined, same-origin wrapper page per media type. The
+  // explorer itself never renders the untrusted bytes.
+  //
+  // The sandbox is per media type. Active documents (raw HTML/SVG, and the
+  // scripted model viewer) run under sandbox=allow-scripts: an opaque origin
+  // with no same-origin access — which also means the browser HTTP cache is
+  // keyed per document, so their bytes re-download on every view; that is the
+  // price of letting them run. Everything else (images, audio, video, text)
+  // is a server-generated wrapper where nothing can execute, so it gets
+  // allow-same-origin WITHOUT allow-scripts: script-free, but a normal origin
+  // — the immutable /content bytes cache in the browser like any image.
+  if(API){
+    const ct=(c.content_type||'').split(';')[0].trim().toLowerCase();
+    const active=ct==='text/html'||ct==='image/svg+xml'||ct.startsWith('model/');
+    const sandbox=active?'allow-scripts':'allow-same-origin';
+    return `<div class="render"><iframe class="sandboxed" sandbox="${sandbox}" referrerpolicy="no-referrer" loading="lazy" title="counter ${c.number}" src="${API}/preview/${c.number}"></iframe></div>`;
+  }
   return sampleRender(c);   // file:// has no server: render the bundled sample inline
 }
 function sampleRender(c){
@@ -709,14 +722,20 @@ function doSearch(e){
 function copy(t){navigator.clipboard?.writeText(t).then(()=>toast('Copied'));}
 let tT;function toast(m){const e=el('toast');e.textContent=m;e.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>e.classList.remove('show'),1400);}
 
-/* show the deployed build revision (from /status) in the footer */
+/* show the release (from /status) in the footer: the commit names the exact
+   build (linked to its page on GitHub) and `updated` is when the deployed
+   code last changed. Absent fields simply drop out of the line. */
 async function showBuild(){
   const e=el('build'); if(!e) return;
-  let commit='dev';
-  try{ const st=await getStatus(); if(st&&st.commit) commit=st.commit; }catch(_){}
-  e.innerHTML = (commit && commit!=='dev')
-    ? `build <a href="https://github.com/BitcoinCounters/counters-proto/commit/${encodeURIComponent(commit)}" target="_blank" rel="noopener"><code>${esc(commit)}</code></a>`
-    : `build <code>${esc(commit)}</code>`;
+  let commit='dev', updated='';
+  try{ const st=await getStatus(); if(st){ if(st.commit) commit=st.commit; if(st.updated) updated=st.updated; } }catch(_){}
+  const REPO='https://github.com/BitcoinCounters/counters-proto';
+  const parts=[];
+  parts.push((commit && commit!=='dev')
+    ? `build <a href="${REPO}/commit/${encodeURIComponent(commit)}" target="_blank" rel="noopener"><code>${esc(commit)}</code></a>`
+    : `build <code>${esc(commit)}</code>`);
+  if(updated) parts.push(`updated <code>${esc(updated.slice(0,16).replace('T',' '))} UTC</code>`);
+  e.innerHTML = parts.join(' · ');
 }
 
 /* ---- boot ---- */
