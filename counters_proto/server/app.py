@@ -203,6 +203,16 @@ def _live_asset(config: Config, asset: str) -> dict:
         return {}
 
 
+def _block_time(config: Config, height: int) -> int | None:
+    """The counter's creation time = its block's timestamp, per Counterparty
+    (best-effort, like _live_asset; None if Core is unreachable)."""
+    try:
+        blk = CounterpartyClient(config).get_block(height)
+    except CounterpartyError:
+        return None
+    return blk.get("block_time") if blk else None
+
+
 def record_dict(store: Store, row: sqlite3.Row, *, owner: str | None = None,
                 with_body: bool = True) -> dict:
     return {
@@ -334,6 +344,7 @@ class Handler(BaseHTTPRequestHandler):
                 rec["fee"], rec["tx_size"] = self._ensure_fee(store, row)
             if rec["xcp_burned"] is None:
                 rec["xcp_burned"] = self._ensure_xcp_burned(store, row)
+            rec["block_time"] = _block_time(self.config, row["block_index"])
             # All counters inscribed on this asset (original first, then any
             # reinscriptions) so the explorer can list them together.
             siblings = store.get_counters_by_asset(row["asset"])

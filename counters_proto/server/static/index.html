@@ -494,6 +494,7 @@ const fmtSize=b=> b<1024?`${b} B`: b<1048576?`${(b/1024).toFixed(1)} KB`:`${(b/1
 const LARGE_BYTES=400000;      // over 400 KB: too big for standard relay, mined direct
 const FULL_BLOCK_BYTES=3500000; // over 3.5 MB: the inscription fills an entire block
 const sizeTag=c=> c.size>FULL_BLOCK_BYTES?'full block': c.size>LARGE_BYTES?'large': null;
+const fmtDate=t=>new Date(t*1000).toISOString().replace('T',' ').slice(0,16)+' UTC';
 const fmtSupply=c=> c.divisible ? (+(c.supply/1e8).toFixed(8)).toLocaleString('en-US',{maximumFractionDigits:8}) : (+c.supply).toLocaleString();
 
 function card(c){
@@ -575,6 +576,7 @@ async function renderDetail(id){
         ${fact('size', fmtSize(c.size))}
         ${fact('owner', short(c.owner), true, c.owner)}
         ${fact('block', `<a class="blocklink" onclick="go('#/b/${c.block}')">${c.block.toLocaleString()}</a> · pos ${c.position}`)}
+        ${c.block_time ? fact('created', fmtDate(c.block_time)) : ''}
         ${fact('mint tx', `<a href="${mp}" target="_blank" rel="noopener" class="out">${short(c.txid)} ↗</a>`, true, c.txid)}
         ${c.fee!=null ? fact('fee paid', `${c.fee.toLocaleString()} sats`) : ''}
         ${(c.fee!=null && c.tx_size) ? fact('fee/B', `${(c.fee/c.tx_size).toFixed(1)} sats`) : ''}
