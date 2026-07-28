@@ -58,10 +58,10 @@ RESERVED_ASSETS = frozenset({"BTC", "XCP"})
 # marker could in principle appear in other scripts the rules may later cover.)
 TAPROOT_ACTIVATION_HEIGHT = 709632
 
-# Block of the counters genesis transaction (COUNTERZERO, #0). `--from-genesis`
+# Block of the counters-proto genesis transaction (COUNTERZERO, #0). `--from-genesis`
 # starts here: by protocol there is no valid counter before #0, so a scan that
 # trusts the genesis point can skip everything earlier.
-COUNTERS_GENESIS_HEIGHT = 955251
+COUNTERS_PROTO_GENESIS_HEIGHT = 955251
 
 
 @dataclass
@@ -86,11 +86,11 @@ class Config:
     )
 
     # Indexing range / behaviour
-    # A first-time scan starts at block 0 by default (exhaustive). The CLI's
-    # --from-taproot / --from-genesis flags (or COUNTER_START_HEIGHT) raise this
-    # floor; stored sync progress always takes precedence on later runs.
+    # A first-time scan starts at COUNTERS_PROTO_GENESIS_HEIGHT (955251, counter #0's
+    # block). --from-taproot or COUNTER_START_HEIGHT (0 = exhaustive scan) move
+    # this floor; stored sync progress always takes precedence on later runs.
     start_height: int = field(
-        default_factory=lambda: _env_int("COUNTER_START_HEIGHT", 0)
+        default_factory=lambda: _env_int("COUNTER_START_HEIGHT", COUNTERS_PROTO_GENESIS_HEIGHT)
     )
     confirmations: int = field(default_factory=lambda: _env_int("COUNTER_CONFIRMATIONS", 0))
     poll_interval: float = field(default_factory=lambda: _env_float("COUNTER_POLL_INTERVAL", 15.0))

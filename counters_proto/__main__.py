@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import sys
+from pathlib import Path
 
 from .commands import inscribe, read, send, serve, wallet
 from .bitcoind import BitcoindError
-from .config import COUNTERS_GENESIS_HEIGHT, TAPROOT_ACTIVATION_HEIGHT, Config
+from .config import COUNTERS_PROTO_GENESIS_HEIGHT, TAPROOT_ACTIVATION_HEIGHT, Config
 from .counterparty import CounterpartyError
 from .indexer import Indexer
 
@@ -62,6 +64,27 @@ class _OrdStyleHelp(argparse.RawDescriptionHelpFormatter):
         return text
 
 
+def _wipe_index(config: Config) -> None:
+    """Delete the local index — the SQLite DB (with its WAL/SHM sidecars) and the
+    content-addressed blob store — so the next run rebuilds from genesis. Only
+    the counters data dir is touched; the flag is the confirmation, so this
+    prints what it removed rather than prompting."""
+    db = config.db_path
+    removed: list[str] = []
+    for p in (db, Path(f"{db}-wal"), Path(f"{db}-shm")):
+        if p.exists():
+            p.unlink()
+            removed.append(p.name)
+    if config.blobs_dir.exists():
+        shutil.rmtree(config.blobs_dir)
+        removed.append("blobs/")
+    where = config.data_dir
+    if removed:
+        print(f"--restart: wiped {', '.join(removed)} from {where}", file=sys.stderr)
+    else:
+        print(f"--restart: nothing to wipe in {where}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     # A parent parser carries -v so it is accepted both before AND after the
     # subcommand. SUPPRESS default means an absent flag won't overwrite a value
@@ -88,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- daemon / indexing ---
     # Where a FIRST-TIME scan begins (ignored once the DB has stored progress).
-    # Default is block 0 (exhaustive); these flags raise the floor.
+    # Default is COUNTERS_PROTO_GENESIS_HEIGHT (955251, #0); these flags move it.
     startfrom = argparse.ArgumentParser(add_help=False)
     g_start = startfrom.add_mutually_exclusive_group()
     g_start.add_argument(
@@ -98,29 +121,36 @@ def main(argv: list[str] | None = None) -> int:
     )
     g_start.add_argument(
         "--from-genesis", action="store_true",
-        help=f"scan from the counters genesis block ({COUNTERS_GENESIS_HEIGHT}, #0); "
-             f"trusts that no valid counter precedes it",
+        help=f"scan from the counters-proto genesis block ({COUNTERS_PROTO_GENESIS_HEIGHT}, #0; "
+             f"the default); trusts that no valid counter precedes it",
     )
 
+    # `--restart` wipes the local index (DB + content blobs) and rebuilds from
+    # genesis — handy after a schema change or to re-derive from scratch.
+    restart_help = "delete the local index (DB + blobs) and rebuild from genesis"
+
     # `run` is a backward-compatible alias for `index`.
-    sub.add_parser(
+    p_index = sub.add_parser(
         "index",
         parents=[common, startfrom],
         aliases=["run"],
         help="continuously sync to tip and follow new blocks",
     )
+    p_index.add_argument("--restart", action="store_true", help=restart_help)
 
     p_sync = sub.add_parser(
         "sync", parents=[common, startfrom], help="sync once up to the tip and exit"
     )
     p_sync.add_argument("--stop-at", type=int, default=None, help="stop at this block height")
+    p_sync.add_argument("--restart", action="store_true", help=restart_help)
 
     p_server = sub.add_parser(
         "server", parents=[common],
         help="run the indexer AND serve the web explorer + read-only JSON API",
     )
+    p_server.add_argument("--restart", action="store_true", help=restart_help)
     p_server.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
-    p_server.add_argument("--port", type=int, default=8081, help="port (default: 8081)")
+    p_server.add_argument("--port", type=int, default=8082, help="port (default: 8082)")
     p_server.add_argument(
         "--no-index", action="store_true",
         help="serve only; do not run the indexer (e.g. when `counters-proto index` "
@@ -261,7 +291,10 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "from_taproot", False):
         config.start_height = TAPROOT_ACTIVATION_HEIGHT
     elif getattr(args, "from_genesis", False):
-        config.start_height = COUNTERS_GENESIS_HEIGHT
+        config.start_height = COUNTERS_PROTO_GENESIS_HEIGHT
+
+    if getattr(args, "restart", False):
+        _wipe_index(config)
 
     if args.command in ("index", "run"):
         indexer = Indexer(config)

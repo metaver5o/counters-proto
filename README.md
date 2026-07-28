@@ -68,7 +68,7 @@ pip install -e .          # installs deps + the `counters` console command
 
 The repo ships a `Dockerfile` and a `docker-compose.yml` with two services:
 
-- **`counters`** — the web explorer + read-only JSON API on port `8081`.
+- **`counters`** — the web explorer + read-only JSON API on port `8082`.
 - **`indexer`** — the indexing engine (runs `index --from-genesis`); needs a
   reachable **bitcoind** and **Counterparty Core**.
 
@@ -80,7 +80,7 @@ docker compose logs -f counters  # follow logs
 docker compose down              # stop
 ```
 
-The explorer is then at `http://127.0.0.1:8081`. The index (SQLite + blobs)
+The explorer is then at `http://127.0.0.1:8082`. The index (SQLite + blobs)
 persists in the `counters-data` volume, mounted at `/data` inside the
 containers. On Linux, `host.docker.internal` resolves to the Docker host (wired
 up via `extra_hosts`), so the defaults in `.env.example` point at bitcoind /
@@ -100,15 +100,16 @@ Core running on the host.
 | `BTC_RPC_USER` / `BTC_RPC_PASSWORD` | — | fallback if no cookie |
 | `CP_API_URL` | `http://127.0.0.1:4000` | Counterparty Core v2 API |
 | `COUNTER_DATA_DIR` | `data/` | SQLite + blobs location |
-| `COUNTER_START_HEIGHT` | `0` | first block a fresh scan starts at |
+| `COUNTER_START_HEIGHT` | `955251` | first block a fresh scan starts at |
 | `COUNTER_CONFIRMATIONS` | `0` | blocks behind tip to stay |
 | `COUNTER_POLL_INTERVAL` | `15` | seconds between tip polls in `run` |
 
-> A fresh scan starts at **block 0**. Raise the floor with `--from-taproot`
-> (block 709632 — no taproot reveal can exist earlier) or `--from-genesis`
-> (block 955251 — counter #0; nothing valid precedes it), or set
-> `COUNTER_START_HEIGHT`. Stored progress always wins, so this only applies to a
-> fresh DB — to rescan, `rm -rf data` first.
+> A fresh scan starts at the **counters-proto genesis block 955251** (counter
+> #0; by protocol nothing valid precedes it — same as `--from-genesis`). Move
+> the floor with `--from-taproot` (block 709632 — no taproot reveal can exist
+> earlier) or `COUNTER_START_HEIGHT` (`0` for an exhaustive scan). Stored
+> progress always wins, so this only applies to a fresh DB — pass `--restart`
+> to wipe the index (DB + blobs) and rebuild from genesis.
 
 ## Usage
 
@@ -117,9 +118,9 @@ Invoke as `counters-proto <command>` after `pip install -e .`, or equivalently
 
 ```bash
 # --- indexing ---
-counters-proto index -v                                  # scan from block 0, then follow the tip
-counters-proto index --from-taproot                      # skip pre-taproot blocks (fresh DB only)
-counters-proto index --from-genesis                      # start at counter #0's block (fresh DB only)
+counters-proto index -v                                  # scan from genesis (block 955251), then follow the tip
+counters-proto index --from-taproot                      # scan from taproot activation instead (fresh DB only)
+counters-proto index --restart                           # wipe the index (DB + blobs) and rebuild from genesis
 counters-proto sync --stop-at 720000                     # one-shot catch-up (bounded for tests)
 
 # --- reads (need only a synced index) ---
@@ -136,9 +137,10 @@ counters-proto info 0 --save cat.png                      # write the file to di
 counters-proto validate <txid>                           # is this tx a counter, and why / why not
 
 # --- web explorer + read-only JSON API ---
-counters-proto server                                    # indexer + explorer on http://127.0.0.1:8081
+counters-proto server                                    # indexer + explorer on http://127.0.0.1:8082
 counters-proto server --no-index                         # serve only (index runs elsewhere)
-counters-proto server --host 0.0.0.0 --port 8081         # bind publicly / pick a port
+counters-proto server --host 0.0.0.0 --port 8082         # bind publicly / pick a port
+counters-proto server --restart                          # wipe the index and rebuild from genesis
 
 # --- wallet (taproot BIP86, bc1p; keys held by Bitcoin Core) ---
 counters-proto wallet --name mywallet create             # new wallet; prints a 12-word seed ONCE

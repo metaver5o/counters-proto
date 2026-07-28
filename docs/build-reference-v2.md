@@ -270,7 +270,7 @@ advance the cursor, and silently skip any counters in the gap.
 - A first-time scan starts at block `0` (exhaustive) by default.
 - `--from-taproot` starts at the taproot activation height (`709632`); no
   witness-based counter can exist before it.
-- `--from-genesis` starts at the counters genesis block (`955251`); by protocol
+- `--from-genesis` starts at the counters-proto genesis block (`955251`); by protocol
   there is no valid counter before `#0`.
 - Stored sync progress always takes precedence on later runs.
 
@@ -316,7 +316,7 @@ from being recorded.
 | `MAX_PUSH` | `520` bytes per data push |
 | `LEAF_VERSION_TAPSCRIPT` | `0xc0` |
 | `TAPROOT_ACTIVATION_HEIGHT` | `709632` |
-| `COUNTERS_GENESIS_HEIGHT` | `955251` (block of counter `#0`, asset `COUNTERZERO`) |
+| `COUNTERS_PROTO_GENESIS_HEIGHT` | `955251` (block of counter `#0`, asset `COUNTERZERO`) |
 
 ---
 
