@@ -1,0 +1,31 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, staging]
+
+jobs:
+  review:
+    name: Claude review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Claude PR review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Review this pull request for the Bitcoin Counters webapp (metaver5o/counters-proto).
+            Focus on:
+            1. Correctness bugs — Bitcoin transaction construction, Counterparty asset logic, wallet signing
+            2. Security — XSS, credential leakage, insecure iframe sandbox, API key exposure in JS bundle
+            3. Svelte 5 rune misuse — $effect writing state, $derived with side effects, missing cleanup
+            4. API contract violations — field names against /counters /counter/:id /status endpoints
+            5. Simplification — unnecessary abstractions, dead code, over-engineering
+            Be concise. High-confidence findings only. Skip style nits.
