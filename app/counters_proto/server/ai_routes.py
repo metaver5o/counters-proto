@@ -54,9 +54,10 @@ def _allow(ip: str) -> bool:
 def _anthropic():
     try:
         import anthropic  # type: ignore[import]
-        return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    except KeyError:
-        return None
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            return None
+        return anthropic.Anthropic(api_key=key)
     except ImportError:
         log.warning("anthropic package not installed; pip install anthropic")
         return None
@@ -75,13 +76,17 @@ def _valid_asset_name(name: str) -> bool:
 
 
 def _ask(client, system: str, user: str, max_tokens: int = 256) -> str:
-    msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    return msg.content[0].text.strip()
+    try:
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        return msg.content[0].text.strip()
+    except Exception as e:
+        log.warning("Anthropic API error: %s", e)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +119,11 @@ def _mint_parse(handler: BaseHTTPRequestHandler) -> None:
         "Numeric assets (A + number) are free — use null for asset if the user wants a free numeric one. "
         "divisible=false for art/collectibles, true for currency/tokens."
     )
-    raw = _ask(client, system, text)
+    try:
+        raw = _ask(client, system, text)
+    except Exception as e:
+        _json(handler, {"error": f"AI request failed: {e}"}, 503)
+        return
     try:
         params = json.loads(raw)
         if params.get("asset") and not _valid_asset_name(params["asset"]):
