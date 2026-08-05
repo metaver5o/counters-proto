@@ -115,7 +115,7 @@
     <div class="meta">{rangeMeta}</div>
   </div>
 
-  <TabBar {activeTab} onSelect={(t) => { activeTab = t }} />
+  <TabBar active={activeTab} onSelect={(t) => { activeTab = t }} />
 
   {#if appState.loading}
     <div class="loading">Loading…</div>
