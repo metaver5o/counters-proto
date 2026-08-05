@@ -17,25 +17,26 @@ function parseRoute(): Route {
   return { view: 'home', page: null }
 }
 
-export let route = $state<Route>({ view: 'home', page: null })
+// Wrap in an object so we can mutate .current without reassigning the exported binding.
+export const routeState = $state({ current: parseRoute() as Route })
 
 export function syncRoute(): void {
-  route = parseRoute()
+  routeState.current = parseRoute()
 }
 
 export function go(hash: string): void {
   if (typeof window === 'undefined') return
   if (window.location.pathname !== '/') {
     window.history.pushState({}, '', '/' + hash)
-    route = parseRoute()
+    routeState.current = parseRoute()
   } else {
     window.location.hash = hash
-    // hashchange fires and syncRoute() handles the update
+    // hashchange fires → syncRoute() called by App $effect
   }
 }
 
 export function goCounter(id: string | number): void {
   if (typeof window === 'undefined') return
   window.history.pushState({}, '', '/c/' + encodeURIComponent(String(id)))
-  route = parseRoute()
+  routeState.current = parseRoute()
 }

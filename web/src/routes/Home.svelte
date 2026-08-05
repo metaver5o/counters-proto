@@ -122,7 +122,7 @@
   {:else if filteredCounters.length === 0}
     <div class="empty">
       <b>{activeTab !== 'all' ? `No ${activeTab} counters` : 'The sequence has just begun'}</b>
-      {activeTab !== 'all' ? 'No counters match this filter yet.' : 'Counter #0 is the genesis. New counters appear here as they're minted.'}
+      {activeTab !== 'all' ? 'No counters match this filter yet.' : "Counter #0 is the genesis. New counters appear here as they're minted."}
     </div>
   {:else}
     <div class="grid">

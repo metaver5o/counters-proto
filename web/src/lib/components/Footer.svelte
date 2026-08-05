@@ -25,12 +25,12 @@
     </div>
     <div class="lk">
       <b>Server API</b>
-      <a><code>GET /status</code></a>
-      <a><code>GET /counters</code></a>
-      <a><code>GET /counter/:id</code></a>
-      <a><code>GET /block/:height</code></a>
-      <a><code>GET /content/:n</code></a>
-      <a><code>GET /preview/:n</code></a>
+      <span><code>GET /status</code></span>
+      <span><code>GET /counters</code></span>
+      <span><code>GET /counter/:id</code></span>
+      <span><code>GET /block/:height</code></span>
+      <span><code>GET /content/:n</code></span>
+      <span><code>GET /preview/:n</code></span>
     </div>
     <div class="lk colophon">
       The reference frontend for <code>counters&nbsp;server</code>. Counters are files in Bitcoin witness data, owned through Counterparty assets, numbered from zero.

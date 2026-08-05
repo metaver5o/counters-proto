@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { go, goCounter, route } from '../router.svelte.js'
+  import { go, goCounter, routeState } from '../router.svelte.js'
   import WalletButton from './WalletButton.svelte'
 
   let q = $state('')
@@ -12,8 +12,8 @@
     q = ''
   }
 
-  const activeExplore = $derived(route.view === 'home' || route.view === 'detail' || route.view === 'block')
-  const activeDocs = $derived(route.view === 'docs')
+  const activeExplore = $derived(routeState.current.view === 'home' || routeState.current.view === 'detail' || routeState.current.view === 'block')
+  const activeDocs = $derived(routeState.current.view === 'docs')
 </script>
 
 <header>
