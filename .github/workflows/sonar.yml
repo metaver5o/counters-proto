@@ -21,6 +21,7 @@ jobs:
       - run: pip install -e . pytest pytest-cov 2>/dev/null || pip install -e . pytest
       - run: python -m pytest tests/ --cov=counters_proto --cov-report=xml --tb=short || true
       - uses: SonarSource/sonarcloud-github-action@master
+        continue-on-error: true  # non-blocking until project is created at sonarcloud.io
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
