@@ -30,7 +30,9 @@ target-version = "py310"
 # Ignore upgrade/simplification rules that flag pre-existing upstream code.
 # Bug-catching rules (E, F, B, S) remain active.
 extend-ignore = [
-    "UP",    # pyupgrade — quoted annotations, union syntax etc. in inherited code
-    "SIM",   # simplification — nested with, ternary rewrites in inherited code
-    "RUF",   # ruff-specific — not enforced on inherited codebase
+    "UP",    # pyupgrade — quoted annotations, union syntax (pre-existing upstream)
+    "SIM",   # simplification — nested with, ternary rewrites (pre-existing upstream)
+    "RUF",   # ruff-specific (pre-existing upstream)
+    "I",     # isort — import order in inherited files
+    "BLE",   # blind exception catches in inherited code (indexer error recovery)
 ]
