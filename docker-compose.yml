@@ -4,6 +4,7 @@ services:
       context: ./app
       args:
         GIT_COMMIT: ${GIT_COMMIT:-dev}
+    command: ["server", "--no-index", "--host", "0.0.0.0", "--port", "8082"]
     ports:
       - "8082:8082"
     volumes:
