@@ -1,13 +1,9 @@
 import { AddressPurpose, BitcoinNetworkType, getAddress } from '@sats-connect/core'
 
-declare global {
-  interface Window {
-    XverseProviders?: { BitcoinProvider?: unknown }
-  }
-}
-
 export function isXverseAvailable(): boolean {
-  return typeof window !== 'undefined' && !!(window.XverseProviders?.BitcoinProvider)
+  // @sats-connect/core already declares window.XverseProviders; cast to any
+  // to avoid conflicting with its type definition.
+  return typeof window !== 'undefined' && !!(window as any).XverseProviders?.BitcoinProvider
 }
 
 export async function connectXverse(): Promise<{
