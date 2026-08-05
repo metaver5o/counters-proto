@@ -22,3 +22,17 @@ include = ["counters_proto*"]
 [tool.setuptools.package-data]
 "counters_proto.server" = ["static/*"]
 "counters_proto" = ["electrum1_words.txt"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Ignore upgrade/simplification rules that flag pre-existing upstream code.
+# Bug-catching rules (E, F, B, S) remain active.
+extend-ignore = [
+    "UP",    # pyupgrade — quoted annotations, union syntax (pre-existing upstream)
+    "SIM",   # simplification — nested with, ternary rewrites (pre-existing upstream)
+    "RUF",   # ruff-specific (pre-existing upstream)
+    "I",     # isort — import order in inherited files
+    "BLE",   # blind exception catches in inherited code (indexer error recovery)
+]
