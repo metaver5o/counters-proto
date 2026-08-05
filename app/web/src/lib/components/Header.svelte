@@ -44,6 +44,11 @@
         onclick={(e) => { e.preventDefault(); go('#/') }}
       >Explore</a>
       <a
+        href="#/mint"
+        class:on={routeState.current.view === 'mint'}
+        onclick={(e) => { e.preventDefault(); go('#/mint') }}
+      >Mint</a>
+      <a
         href="#/docs"
         class:on={activeDocs}
         onclick={(e) => { e.preventDefault(); go('#/docs') }}

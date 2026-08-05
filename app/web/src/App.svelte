@@ -7,6 +7,7 @@
   import CounterDetail from './routes/CounterDetail.svelte'
   import BlockView from './routes/BlockView.svelte'
   import Docs from './routes/Docs.svelte'
+  import Mint from './routes/Mint.svelte'
   let walletModalOpen = $state(false)
 
   // Sync route on hashchange and browser back/forward
@@ -36,6 +37,8 @@
     <CounterDetail id={detailRoute.id} />
   {:else if blockRoute}
     <BlockView height={blockRoute.height} />
+  {:else if routeState.current.view === 'mint'}
+    <Mint />
   {:else}
     <Docs />
   {/if}
