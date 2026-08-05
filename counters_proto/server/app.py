@@ -37,6 +37,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import card, png, preview
+from .ai_routes import handle_ai
 from ..bitcoind import BitcoindClient
 from ..config import Config
 from ..counterparty import CounterpartyClient, CounterpartyError
@@ -388,6 +389,8 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if handle_ai(self, path, self.command):
+                return
             if path == "/status":
                 return self._status()
             if path == "/counters":
@@ -417,6 +420,19 @@ class Handler(BaseHTTPRequestHandler):
         except BrokenPipeError:
             pass
         except Exception as e:  # never leak a stack trace to the client
+            log.exception("request failed: %s", self.path)
+            self._json({"error": str(e)}, status=500)
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        try:
+            if handle_ai(self, path, self.command):
+                return
+            self._send(405, "text/plain; charset=utf-8", b"method not allowed")
+        except BrokenPipeError:
+            pass
+        except Exception as e:
             log.exception("request failed: %s", self.path)
             self._json({"error": str(e)}, status=500)
 
