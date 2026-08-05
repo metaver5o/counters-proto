@@ -222,6 +222,9 @@ def _name_suggest(handler: BaseHTTPRequestHandler) -> None:
 
 def handle_ai(handler: BaseHTTPRequestHandler, path: str, method: str) -> bool:
     """Call from Handler.do_GET / do_POST. Returns True if the request was handled."""
+    if not path.startswith("/ai/"):
+        return False  # path check before rate limit — don't burn tokens on non-AI paths
+
     ip = handler.client_address[0]
     if not _allow(ip):
         _json(handler, {"error": "rate limited"}, 429)
