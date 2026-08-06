@@ -14,7 +14,7 @@ export async function loadCounters(page: number | null = null): Promise<void> {
   appState.loading = true
   appState.error = null
   try {
-    const st = appState.status ?? await api.status()
+    const st = await api.status()
     appState.status = st
     const count = st?.count ?? 1
     const pages = Math.max(1, Math.ceil(count / PAGE))
@@ -38,7 +38,7 @@ export async function loadAllCounters(): Promise<void> {
   appState.loading = true
   appState.error = null
   try {
-    const st = appState.status ?? await api.status()
+    const st = await api.status()
     appState.status = st
     const count = st?.count ?? 0
     if (count <= 500) {
