@@ -1,7 +1,8 @@
 import { connectUnisat, onUnisatAccountChange } from './unisat.js'
 import { connectXverse } from './xverse.js'
+import { connectHorizon, onHorizonAccountChange } from './horizon.js'
 
-export type WalletKind = 'unisat' | 'xverse' | null
+export type WalletKind = 'unisat' | 'xverse' | 'horizon' | null
 
 export interface WalletState {
   connected: boolean
@@ -20,6 +21,7 @@ export let walletState = $state<WalletState>({
 })
 
 let unsubscribeUnisat: (() => void) | null = null
+let unsubscribeHorizon: (() => void) | null = null
 
 export async function connectWallet(kind: WalletKind): Promise<boolean> {
   if (kind === 'unisat') {
@@ -33,12 +35,8 @@ export async function connectWallet(kind: WalletKind): Promise<boolean> {
     localStorage.setItem('wallet:kind', 'unisat')
     localStorage.setItem('wallet:address', result.address)
     unsubscribeUnisat = onUnisatAccountChange((addr) => {
-      if (addr === null) {
-        disconnectWallet()
-      } else {
-        walletState.address = addr
-        localStorage.setItem('wallet:address', addr)
-      }
+      if (addr === null) { disconnectWallet() }
+      else { walletState.address = addr; localStorage.setItem('wallet:address', addr) }
     })
     return true
   }
@@ -57,11 +55,29 @@ export async function connectWallet(kind: WalletKind): Promise<boolean> {
     return true
   }
 
+  if (kind === 'horizon') {
+    const result = await connectHorizon()
+    if (!result) return false
+    walletState.connected = true
+    walletState.kind = 'horizon'
+    walletState.address = result.address
+    walletState.ordinalsAddress = null
+    walletState.publicKey = result.publicKey
+    localStorage.setItem('wallet:kind', 'horizon')
+    localStorage.setItem('wallet:address', result.address)
+    unsubscribeHorizon = onHorizonAccountChange((addr) => {
+      if (addr === null) { disconnectWallet() }
+      else { walletState.address = addr; localStorage.setItem('wallet:address', addr) }
+    })
+    return true
+  }
+
   return false
 }
 
 export function disconnectWallet(): void {
   if (unsubscribeUnisat) { unsubscribeUnisat(); unsubscribeUnisat = null }
+  if (unsubscribeHorizon) { unsubscribeHorizon(); unsubscribeHorizon = null }
   walletState.connected = false
   walletState.kind = null
   walletState.address = null
@@ -72,25 +88,41 @@ export function disconnectWallet(): void {
   localStorage.removeItem('wallet:ordinalsAddress')
 }
 
-// Silent reconnect on module load — Unisat only (Xverse has no silent path).
+// Silent reconnect on load — Unisat and Horizon support getAccounts(), Xverse does not.
 ;(async () => {
   if (typeof window === 'undefined') return
   const kind = localStorage.getItem('wallet:kind') as WalletKind
-  if (kind !== 'unisat') return
-  if (!window.unisat) return
-  try {
-    const accounts = await window.unisat.getAccounts()
-    if (!accounts.length) { disconnectWallet(); return }
-    const publicKey = await window.unisat.getPublicKey()
-    walletState.connected = true
-    walletState.kind = 'unisat'
-    walletState.address = accounts[0]
-    walletState.publicKey = publicKey
-    unsubscribeUnisat = onUnisatAccountChange((addr) => {
-      if (addr === null) { disconnectWallet() }
-      else { walletState.address = addr; localStorage.setItem('wallet:address', addr) }
-    })
-  } catch {
-    disconnectWallet()
+
+  if (kind === 'unisat' && window.unisat) {
+    try {
+      const accounts = await window.unisat.getAccounts()
+      if (!accounts.length) { disconnectWallet(); return }
+      const publicKey = await window.unisat.getPublicKey()
+      walletState.connected = true
+      walletState.kind = 'unisat'
+      walletState.address = accounts[0]
+      walletState.publicKey = publicKey
+      unsubscribeUnisat = onUnisatAccountChange((addr) => {
+        if (addr === null) { disconnectWallet() }
+        else { walletState.address = addr; localStorage.setItem('wallet:address', addr) }
+      })
+    } catch { disconnectWallet() }
+    return
+  }
+
+  if (kind === 'horizon' && window.horizon) {
+    try {
+      const accounts = await window.horizon.getAccounts()
+      if (!accounts.length) { disconnectWallet(); return }
+      const publicKey = await window.horizon.getPublicKey()
+      walletState.connected = true
+      walletState.kind = 'horizon'
+      walletState.address = accounts[0]
+      walletState.publicKey = publicKey
+      unsubscribeHorizon = onHorizonAccountChange((addr) => {
+        if (addr === null) { disconnectWallet() }
+        else { walletState.address = addr; localStorage.setItem('wallet:address', addr) }
+      })
+    } catch { disconnectWallet() }
   }
 })()

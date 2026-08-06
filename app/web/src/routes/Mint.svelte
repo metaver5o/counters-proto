@@ -76,20 +76,25 @@
   function openWallet() { window.dispatchEvent(new CustomEvent('wallet-connect')) }
 
   // -------------------------------------------------------------------------
-  // Wallet helpers (Unisat)
+  // Wallet helpers — Unisat + Horizon share the same API surface
   // -------------------------------------------------------------------------
-  function unisat() { return (window as any).unisat }
-
-  async function unisatSendBitcoin(address: string, sats: number): Promise<string> {
-    return await unisat().sendBitcoin(address, sats)
+  function activeProvider() {
+    const kind = walletState.kind
+    if (kind === 'unisat') return (window as any).unisat
+    if (kind === 'horizon') return (window as any).horizon
+    return null
   }
 
-  async function unisatGetUtxos(): Promise<Array<{ txid: string; vout: number; satoshis: number; scriptPk: string }>> {
-    return await unisat().getUtxos()
+  async function walletSendBitcoin(address: string, sats: number): Promise<string> {
+    return await activeProvider().sendBitcoin(address, sats)
   }
 
-  async function unisatSignPsbt(psbtHex: string, address: string): Promise<string> {
-    return await unisat().signPsbt(psbtHex, {
+  async function walletGetUtxos(): Promise<Array<{ txid: string; vout: number; satoshis: number; scriptPk: string }>> {
+    return await activeProvider().getUtxos()
+  }
+
+  async function walletSignPsbt(psbtHex: string, address: string): Promise<string> {
+    return await activeProvider().signPsbt(psbtHex, {
       autoFinalized: false,
       toSignInputs: [{ index: 0, address, disableTweakSigner: false }],
     })
@@ -108,8 +113,12 @@
 
   async function mintCounter() {
     if (!walletState.connected || !walletState.address) { openWallet(); return }
-    if (walletState.kind !== 'unisat') {
-      mintError = 'Browser minting requires Unisat. Xverse support coming soon.'
+    if (walletState.kind === 'xverse') {
+      mintError = 'Xverse PSBT signing coming soon — use Unisat or Horizon to mint.'
+      mintStep = 'error'; return
+    }
+    if (!activeProvider()) {
+      mintError = 'Wallet provider not found — reconnect your wallet.'
       mintStep = 'error'; return
     }
 
@@ -144,10 +153,10 @@
       const { session_id, commit_address, commit_value_sats, min_source_sats } = prep
 
       // --- 3. Wallet pays commit (just DUST to taproot address) ---
-      const commitTxid: string = await unisatSendBitcoin(commit_address, commit_value_sats)
+      const commitTxid: string = await walletSendBitcoin(commit_address, commit_value_sats)
 
       // --- 4. Pick source UTXO for reveal vin[0] ---
-      const utxos = await unisatGetUtxos()
+      const utxos = await walletGetUtxos()
       // Exclude the freshly-created commit output (same txid) and pick largest eligible
       const src = utxos
         .filter(u => u.txid !== commitTxid && u.satoshis >= (min_source_sats as number))
@@ -176,7 +185,7 @@
       if (!revRes.ok) throw new Error(rev.error ?? 'reveal build failed')
 
       // --- 6. Wallet signs vin[0] ---
-      const signedPsbt: string = await unisatSignPsbt(rev.reveal_psbt_hex, walletState.address!)
+      const signedPsbt: string = await walletSignPsbt(rev.reveal_psbt_hex, walletState.address!)
 
       // --- 7. Broadcast ---
       mintStep = 'broadcasting'
@@ -337,8 +346,8 @@
         >
           Mint Counter{isNumeric ? '' : ` — ${assetName}`}
         </button>
-        {#if walletState.kind !== 'unisat'}
-          <p class="wallet-note">Xverse signing coming soon — switch to Unisat for browser minting</p>
+        {#if walletState.kind === 'xverse'}
+          <p class="wallet-note">Xverse PSBT signing coming soon — use Unisat or Horizon to mint</p>
         {/if}
       {:else}
         <button class="mint-btn connect-mode" onclick={openWallet}>

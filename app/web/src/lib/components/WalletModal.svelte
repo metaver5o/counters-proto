@@ -2,10 +2,11 @@
   import { walletState, connectWallet, disconnectWallet } from '../wallet/store.svelte.js'
   import { isUnisatAvailable } from '../wallet/unisat.js'
   import { isXverseAvailable } from '../wallet/xverse.js'
+  import { isHorizonAvailable } from '../wallet/horizon.js'
 
   let { modalOpen = $bindable(false) }: { modalOpen?: boolean } = $props()
 
-  let connecting = $state<'unisat' | 'xverse' | null>(null)
+  let connecting = $state<'unisat' | 'xverse' | 'horizon' | null>(null)
   let error = $state<string | null>(null)
   let toastMsg = $state<string | null>(null)
 
@@ -30,7 +31,7 @@
     if (e.key === 'Escape') close()
   }
 
-  async function connect(kind: 'unisat' | 'xverse') {
+  async function connect(kind: 'unisat' | 'xverse' | 'horizon') {
     error = null
     toastMsg = null
     connecting = kind
@@ -56,6 +57,7 @@
 
   const unisatAvailable = $derived(isUnisatAvailable())
   const xverseAvailable = $derived(isXverseAvailable())
+  const horizonAvailable = $derived(isHorizonAvailable())
 </script>
 
 {#if modalOpen}
@@ -124,6 +126,26 @@
             {#if connecting === 'xverse'}
               <span class="status connecting">Connecting…</span>
             {:else if !xverseAvailable}
+              <span class="status unavail">Not installed</span>
+            {:else}
+              <span class="status avail">Ready</span>
+            {/if}
+          </button>
+
+          <button
+            class="wallet-option"
+            class:unavailable={!horizonAvailable}
+            disabled={!horizonAvailable || connecting !== null}
+            onclick={() => connect('horizon')}
+          >
+            <svg class="wallet-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="20" cy="20" r="20" fill="#0A0E27"/>
+              <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="18" font-weight="bold" fill="#4ECDC4">H</text>
+            </svg>
+            <span class="wallet-name">Horizon</span>
+            {#if connecting === 'horizon'}
+              <span class="status connecting">Connecting…</span>
+            {:else if !horizonAvailable}
               <span class="status unavail">Not installed</span>
             {:else}
               <span class="status avail">Ready</span>
