@@ -11,7 +11,7 @@ dependencies = [
     "requests>=2.31.0",
     "mnemonic>=0.20",
     "ecdsa>=0.18",
-    "google-generativeai>=0.8.0",
+    "google-genai>=1.0.0",
 ]
 
 [project.scripts]

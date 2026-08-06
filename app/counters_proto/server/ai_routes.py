@@ -41,16 +41,18 @@ def _allow(ip: str) -> bool:
 # Gemini client
 # ---------------------------------------------------------------------------
 
+_GEMINI_MODEL = "gemini-3.1-flash-lite"
+
+
 def _gemini():
     try:
-        import google.generativeai as genai  # type: ignore[import]
+        from google import genai  # type: ignore[import]
         key = os.environ.get("GEMINI_API_KEY", "").strip()
         if not key:
             return None
-        genai.configure(api_key=key)
-        return genai.GenerativeModel("gemini-2.0-flash")
+        return genai.Client(api_key=key)
     except ImportError:
-        log.warning("google-generativeai not installed")
+        log.warning("google-genai not installed")
         return None
 
 
@@ -68,7 +70,10 @@ def _valid_asset_name(name: str) -> bool:
 
 def _ask(client, system: str, user: str) -> str:
     try:
-        response = client.generate_content(f"{system}\n\nUser: {user}")
+        response = client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=f"{system}\n\nUser: {user}",
+        )
         return response.text.strip()
     except Exception as e:
         log.warning("Gemini API error: %s", e)
