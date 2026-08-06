@@ -38,6 +38,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import card, png, preview
 from .ai_routes import handle_ai
+from .mint_routes import handle_mint
 from ..bitcoind import BitcoindClient
 from ..config import Config
 from ..counterparty import CounterpartyClient, CounterpartyError
@@ -391,6 +392,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if handle_ai(self, path, self.command):
                 return
+            if handle_mint(self, path, self.command, self.config):
+                return
             if path == "/status":
                 return self._status()
             if path == "/counters":
@@ -429,12 +432,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if handle_ai(self, path, self.command):
                 return
+            if handle_mint(self, path, self.command, self.config):
+                return
             self._send(405, "text/plain; charset=utf-8", b"method not allowed")
         except BrokenPipeError:
             pass
         except Exception as e:
             log.exception("request failed: %s", self.path)
             self._json({"error": str(e)}, status=500)
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     do_HEAD = do_GET
 
